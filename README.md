@@ -1,4 +1,4 @@
-### Simluation of Floquet systems using quantum circuits
+## Simluation of Floquet systems using quantum circuits
 
 In this code, we simulate floquet systems exhibiting exotic phases of matter using linera combination of unitaries (LCU) method. 
 The simulation consists of two parts:
