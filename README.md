@@ -18,7 +18,7 @@ The following tests have successfully been carried out
 
 1- $B^\dagger B = B \, B^\dagger = 1$
 
-2- $W^\dagger W = W \, W^\dagger = 1$
+2- $W^\dagger W = W  W^\dagger = 1$
 
 3- $B$ produces the correct state for $n=2$, $Q = 2 , 3$.
 
