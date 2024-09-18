@@ -20,6 +20,6 @@ The following tests have successfully been carried out
 
 2- $W^\dagger W = W \, W^\dagger = 1$
 
-3- $B$ produces the correct state for $n=2$, $Q = 2\, , \, 3$.
+3- $B$ produces the correct state for $n=2$, $Q = 2 , 3$.
 
 We have also verified that the $W$ gate correctly simulates our desired $U = \sum_{i_q , k_q} \beta_{i_q , k_q} V_{i_q , k_q}$. Recall that $W |\psi\rangle = \frac{1}{s} U_{od} |\psi\rangle + |\Phi\rangle$. It is important to note that we have **failed** to verify that $W$ simulates the off-diagonal part of the *exact* unitary $U(t)$.
