@@ -26,4 +26,4 @@ We have also verified that the $W$ gate correctly simulates our desired $U = \su
 
 #### To do
 
-1- Plot the overlap squared of the post-selected state after simulating $U_0 W$ (state denoted by $\psi_{ap}(t)$) and the exactly simulted state using mathematica denoted by $\psi_e(t)$.  
+1- Plot the overlap squared of the post-selected state after simulating $U_0 W$ (state denoted by $\psi_{ap}(t)$ ) and the exactly simulted state using mathematica denoted by $\psi_e(t)$.  
