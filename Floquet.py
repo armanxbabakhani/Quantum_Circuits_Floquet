@@ -28,9 +28,9 @@ M = OffD_number
 C0 = 1.0 # Parameter for the floquet interaction strength
 Coeffs = C0*np.array([2+(-1)**x for x in np.arange(1,n)]) # there are n elements in this array
 Omega = 1.0
-h0 = 1.0
+h0 = 1.0 * 0.01
 Longit_h = h0*np.array([1.5 + 0.5*(-1)**x for x in range(n)])
-Vx = 1.0
+Vx = 1.0 * 0.01
 p = 2 # number of periods
 K = 2 # number of frequencies per permutation
 C = np.max(Coeffs)
@@ -52,17 +52,36 @@ X2_data = []
 Z1_data = []
 Z2_data = []
 
+
+psi_approx = []
+
+#math.ceil(np.log(r/eps)/np.log(np.log(r/eps)))
+#print('In the precomuting stage, Q is {Q}')
+#if Q > 2:
+#    Q = 2
+
+def Gammaf(iq):
+        G = (2 + (-1)**iq[0])
+        q = len(iq)
+        for j in np.arange(1,q):
+            G = G*(2 + (-1)**iq[j])
+        return G*(Omega * C0 / 2)**q
+
+Gam = np.sum([Gammaf([x]) for x in np.arange(1, n)])
+if Gam == 0:
+    GDt = 0.0
+else:
+    Delta_t = np.log(2)/Gam
+    GDt = Gam*Delta_t
+
+t += Delta_t
 while t < final_time:
-    if Delta_t > t:
-        r = 1
-    else:
-        r = int(t/Delta_t)
+    
+    r = int(t/Delta_t)
 
     eps = 0.05 # 5% tolerance
-    Q = math.ceil(np.log(r/eps)/np.log(np.log(r/eps)))
-    if Q > 3:
-        Q = 3
-
+    print(f't is {t} and r is {r}')
+    Q = 2
 # ============================= Constructing the unitary U_0 =============================== #
 # ---------------------------------- Diagonal Part (H_0) ----------------------------------- #
     #def Diagonal_U0_old(hs , Vs , time):
@@ -148,19 +167,6 @@ while t < final_time:
         # Useful functions:
 
     # Gammaf computes Gamma_i_q! if i_q is a vector it will return the multiplication of all the sub-gammas
-    def Gammaf(iq):
-        G = (2 + (-1)**iq[0])
-        q = len(iq)
-        for j in np.arange(1,q):
-            G = G*(2 + (-1)**iq[j])
-        return G*(Omega * C0 / 2)**q
-
-    Gam = np.sum([Gammaf([x]) for x in np.arange(1, n)])
-    if Gam == 0:
-        GDt = 0.0
-    else:
-        Delta_t = np.log(2)/Gam
-        GDt = Gam*Delta_t
 
     #GDt = 0.05
 
@@ -393,19 +399,19 @@ while t < final_time:
     def A_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index ):
         anc_qubits_index = 3
         W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , False )
-        R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
-        W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , True )
-        R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
-        W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , False )
+        #R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
+        #W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , True )
+        #R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
+        #W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , False )
 
     def Prepare_full_unitary( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , r_number ):
         kq_qbits = Circuit.qregs[kq_qbits_index]
         iq_qbits = Circuit.qregs[iq_qbits_index]
         z_qbits = Circuit.qregs[z_qbits_index]
         print( f'time is {t}' )
-        Circuit.append( Diagonal_U0(Longit_h , Vx , -r*Delta_t) , z_qbits )
         # print( f'the r number is: {r_number}' )
         for ri in range( r_number ):
+            Circuit.append( Diagonal_U0(Longit_h , Vx , -Delta_t) , z_qbits )
             A_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index )
             #W_gate( Circuit , 0 , 1 , 2 , 4 , False )
         # print( f'Circuit is prepared and ready for simulation' )
@@ -491,6 +497,8 @@ while t < final_time:
     final_state = np.array( [final_total_state[0] , final_total_state[increment] , final_total_state[2*increment] , final_total_state[3*increment]] )
     final_state = final_state/np.linalg.norm( final_state )
     print( 'final state is: ' , final_state )
+    psi_approx.append(final_state)
+
     final_state_conj = np.conjugate( final_state )
     final_density = np.outer( final_state , final_state_conj )
 
@@ -499,9 +507,53 @@ while t < final_time:
     Z1_data.append(np.trace(np.dot(final_density , Z1)))
     Z2_data.append(np.trace(np.dot(final_density , Z2)))
 
-    t += Delta_t
     time.append(t)
+    t += Delta_t
 
+
+print(f'The simulation is done for Q = {Q} , n = {n} , Delta t = {Delta_t} , GammaDt = {GDt} , Omega = {Omega} , Vx = {Vx}')
+
+# ============================ Comparing to the exact results =======================================
+
+psi_exact_0 = [[0.823604 - 0.268856j, 0 , 0 , 0.413975 + 0.279316j] ,
+             [0.760281 - 0.250455j, 0 , 0 , -0.564344 - 0.201893j] , 
+             [0.591217 - 0.563383j, 0. , 0. , -0.308169 + 0.487946j] ,
+             [0.761383 - 0.249421j, 0., 0., 0.359156 - 0.478634j] , 
+             [0.438596 - 0.841627j, 0, 0, -0.207798 - 0.236888j] , 
+             [0.6971 - 0.656576j, 0, 0, 0.245904 + 0.149966j] , 
+             [0.0394336 - 0.954782j, 0, 0, -0.27888 + 0.0951996j] , 
+             [0.202655 - 0.939304j, 0, 0, 0.0554213 + 0.27123j] , 
+             [-0.0238209 - 0.722283j, 0 , 0 , 0.0690068 - 0.687734j] , 
+             [-0.324552 - 0.899476j, 0 , 0 , -0.288344 + 0.0496678j]]
+
+psi_exact_small = [[-0.981414 + 0.0167519j, 0, 0, 0.00383924 - 0.19113j] ,
+             [0.469779 + 0.00467553j, 0, 0, -0.0452865 - 0.881609j] , 
+             [0-0.830634 + 0.0314374j, 0, 0, 0.0420445 + 0.554338j] ,
+             [-0.430186 + 0.045801j, 0, 0, 0.0768779 + 0.898293j] , 
+             [-0.238795 + 0.0130824j, 0, 0, -0.0938423 - 0.966436j] , 
+             [-0.888583 + 0.123591j, 0, 0, -0.0440975 - 0.439546j] , 
+             [0.668084 - 0.114349j, 0, 0, 0.0906796 + 0.729631j] , 
+             [-0.974912 + 0.159473j, 0, 0, 0.032855 + 0.151773j] , 
+             [0.94897 - 0.171533j, 0, 0, 0.0478432 + 0.260265j] , 
+             [-0.949677 + 0.188929j, 0, 0, -0.0428947 - 0.246128j]]
+
+psi_exact = psi_exact_small
+
+#psi_approx = psi_approx[1::]
+if(len(psi_exact) == len(psi_approx)):
+    overlaps = []
+    for i in range(len(psi_exact)):
+        overlaps.append(np.abs(np.dot(np.array(psi_approx[i]) , np.array(psi_exact[i])))**2)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(time, overlaps, label='overlap', color='blue' , marker='x')
+    plt.title('The overlaps of the approximate simulation and the exact')
+    plt.xlabel('Time')
+    plt.ylabel('Amplitude')
+
+    plt.show()
+else:
+    print('Comparison plot cannot be made: the number of points in the exact wavefunction do not match the number of simulated points! ')
 
 # ================== Plotting the expectation value of operators ==================== #
 plt.figure(figsize=(10, 6))
