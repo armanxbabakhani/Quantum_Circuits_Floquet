@@ -307,7 +307,7 @@ while t < final_time:
         k_qbits = Circuit.qregs[k_qbits_idx]
         q_qbits = Circuit.qregs[q_qbits_idx]
         
-        delta = 2*Omega*(Delta_t) # Dividing the angle by 2 for rz
+        delta = -2*Omega*(Delta_t) # Dividing the angle by 2 for rz
         phase = 2*Omega*current_time
 
         if dagger:
@@ -331,7 +331,7 @@ while t < final_time:
         k_qbits = Circuit.qregs[k_qbits_idx]
         q_qbits = Circuit.qregs[q_qbits_idx]
         
-        delta = 2*Omega*Delta_t # Dividing the angle by 2 for rz
+        delta = -2*Omega*Delta_t # Dividing the angle by 2 for rz
         
         if dagger:
             for l in range(len(k_qbits)-1 , - 1 , -1):
