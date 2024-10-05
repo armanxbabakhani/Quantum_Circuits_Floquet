@@ -30,8 +30,6 @@ overlaps = []
 for i in range(len(psi_exact)):
     overlaps.append(np.abs(np.dot(np.array(psi_approx[i]) , np.array(psi_exact[i])))**2)
 
-
-
 plt.figure(figsize=(10, 6))
 plt.plot(times, overlaps, label='overlap', color='blue' , marker='x')
 plt.title('The overlaps of the approximate simulation and the exact')

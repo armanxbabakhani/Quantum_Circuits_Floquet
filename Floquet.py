@@ -12,13 +12,13 @@ import matplotlib.pyplot as plt
 
 
 # ===================== Quantum Operators =================== #
-X = np.array([[0 , 1],[1 , 0]])
-X2 = np.kron(np.eye(2) , X)
-X1 = np.kron(X , np.eye(2))
+X = np.array( [[0 , 1],[1 , 0]] )
+X2 = np.kron( np.eye(2) , X )
+X1 = np.kron( X , np.eye(2) )
 
-Z = np.array([[1 , 0],[0 , -1]])
-Z2 = np.kron(np.eye(2) , Z)
-Z1 = np.kron(Z , np.eye(2))
+Z = np.array( [[1 , 0],[0 , -1]] )
+Z2 = np.kron( np.eye(2) , Z )
+Z1 = np.kron( Z , np.eye(2) )
 
 #====================== Circuit Paramters =================== #
 
@@ -26,21 +26,20 @@ n = 2 # number of particles (qubits)
 OffD_number = n-1 # number of permutations
 M = OffD_number
 C0 = 1.0 # Parameter for the floquet interaction strength
-Coeffs = C0*np.array([2+(-1)**x for x in np.arange(1,n)]) # there are n elements in this array
-Omega = 1.0
-h0 = 1.0 * 0.01
-Longit_h = h0*np.array([1.5 + 0.5*(-1)**x for x in range(n)])
-Vx = 1.0 * 0.01
+Coeffs = C0*np.array([2+(-1)**(x+1) for x in np.arange(1,n)]) # there are n elements in this array
+Omega = 4.0
+h0 = 0.0 
+Longit_h = h0*np.array([1.5 + 0.5*(-1)**(x+1) for x in range(n)])
+Vx = 0.0 
 p = 2 # number of periods
 K = 2 # number of frequencies per permutation
 C = np.max(Coeffs)
 
 diags = (Omega/2)*Coeffs
 Gammas = diags
-Gamma = OffD_number * Omega * C0 * K #  Gamma = M K max_i Gamma_i = (n-1) \omega c
+Gamma = OffD_number * C0 * K #  Gamma = M K max_i Gamma_i = (n-1) \omega c
 #Gamma = OffD_number * Omega * 0.5
 Delta_t = np.log(2)/Gamma
-
 
 # ------------------ Taking the final evolution time as an input argument --------------------- #
 final_time = float(sys.argv[1])
@@ -61,22 +60,22 @@ psi_approx = []
 #    Q = 2
 
 def Gammaf(iq):
-        G = (2 + (-1)**iq[0])
-        q = len(iq)
-        for j in np.arange(1,q):
-            G = G*(2 + (-1)**iq[j])
-        return G*(Omega * C0 / 2)**q
+    G = (2 + (-1)**iq[0])
+    q = len(iq)
+    for j in np.arange(1,q):
+        G = G*(2 + (-1)**iq[j])
+    return G*(C0 / 2)**q
 
-Gam = np.sum([Gammaf([x]) for x in np.arange(1, n)])
+#Gam = np.sum([Gammaf([x]) for x in np.arange(1, n)])
+Gam = 3.0
 if Gam == 0:
     GDt = 0.0
 else:
     Delta_t = np.log(2)/Gam
     GDt = Gam*Delta_t
-
+print(f'Delta t is {Delta_t}')
 t += Delta_t
 while t < final_time:
-    
     r = int(t/Delta_t)
 
     eps = 0.05 # 5% tolerance
@@ -105,13 +104,15 @@ while t < final_time:
         U0 = qk.QuantumCircuit(n + 1)
 
         # For single Z rotations (with h_i):
+        # manually reverse the order of qubits:
+        hs_rev = hs[::-1]
         for x in range(n):
-            U0.rz(-2*hs[x]*ev_time , x)
+            U0.rz(2*hs_rev[x]*ev_time , x)
 
         # For two-body ZZ interactions (with V_x):
         for x in range(n-1):
             U0.cx(x , x+1)
-            U0.rz(-2*Vs*ev_time , x+1)
+            U0.rz(2*Vs*ev_time , x+1)
             U0.cx(x , x+1)
         return U0.to_gate()
     
@@ -300,26 +301,50 @@ while t < final_time:
     # UC_Phi_Omega(k_qbits) generates the omega related phases on the k_q registers
     # The only thing that needs to be tested in the Uc_Phi_Omega!
 
-    def Uc_Phi_Omega(Circuit , k_qbits_idx , q_qbits_idx , dagger= False):
+    def Uc_Phi_Omega(Circuit , current_time , k_qbits_idx , q_qbits_idx , dagger= False):
+        # Apply i\omega \sum_l=j^q (-1)^k_l
+        # Omega is a global variable
+        k_qbits = Circuit.qregs[k_qbits_idx]
+        q_qbits = Circuit.qregs[q_qbits_idx]
+        
+        delta = 2*Omega*(Delta_t) # Dividing the angle by 2 for rz
+        phase = 2*Omega*current_time
+
+        if dagger:
+            for l in range(len(k_qbits)-1 , - 1 , -1):
+                if l > 0:
+                    for lk in range(l , -1 , 0):
+                        Circuit.crz( delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l-lk])
+                Circuit.crz( -(l+1)*delta/(l+2) , q_qbits[l]  , k_qbits[l])
+                Circuit.rz(-1.0*phase , k_qbits[l])
+        else:
+            for l in range(len(k_qbits)):
+                Circuit.rz(phase , k_qbits[l])
+                Circuit.crz((l+1)*delta/(l+2) , q_qbits[l] , k_qbits[l])
+                if l > 0:
+                    for lk in np.arange(1 , l+1):
+                        Circuit.crz(-delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l - lk])
+
+    def Uc_Phi_Omega_old(Circuit , k_qbits_idx , q_qbits_idx , dagger= False):
         # Apply i\omega \sum_l=j^q (-1)^k_l
         # Omega is a global variable
         k_qbits = Circuit.qregs[k_qbits_idx]
         q_qbits = Circuit.qregs[q_qbits_idx]
         
         delta = 2*Omega*Delta_t # Dividing the angle by 2 for rz
-
+        
         if dagger:
             for l in range(len(k_qbits)-1 , - 1 , -1):
                 if l > 0:
-                    for lk in range(l-1 , -1 , -1):
-                        Circuit.crz( delta/((l+2)*(l+1)) , q_qbits[l] , k_qbits[lk])
+                    for lk in range(l , -1 , 0):
+                        Circuit.crz( delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l-lk])
                 Circuit.crz( -(l+1)*delta/(l+2) , q_qbits[l]  , k_qbits[l])
         else:
             for l in range(len(k_qbits)):
                 Circuit.crz((l+1)*delta/(l+2) , q_qbits[l] , k_qbits[l])
                 if l > 0:
-                    for lk in range(l):
-                        Circuit.crz(-delta/((l+2)*(l+1)) , q_qbits[l] , k_qbits[lk])
+                    for lk in np.arange(1 , l+1):
+                        Circuit.crz(-delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l - lk])
 
     def U0_q_ctrl( Circuit , delta_t , q_qbits , z_qbits , dagger=False):
         if dagger:
@@ -349,12 +374,18 @@ while t < final_time:
             # Circuit.append( Diagonal_U0( Longit_h , Vx , Delta_t ) , z_qbits )
             U0_q_ctrl( Circuit , -Delta_t*Q , q_qbits , z_qbits , False)
             for j in range(Q , 0 , -1):
-                Uc_P( Circuit , iq_qbits_idx , z_qbits_idx , j , dagger)
+                Uc_P( Circuit , iq_qbits_idx , z_qbits_idx , j , dagger )
                 U0_q_ctrl( Circuit , Delta_t , q_qbits , z_qbits , False )
+
+                Circuit.cp( np.pi , q_qbits[j-1] , z_qbits[0] )
+                Circuit.crz( -np.pi , q_qbits[j-1] , z_qbits[0] )
         else:
             for j in np.arange(1,Q+1):
+                Circuit.crz( np.pi , q_qbits[j-1] , z_qbits[0] )
+                Circuit.cp( -np.pi , q_qbits[j-1] , z_qbits[0] )
+
                 U0_q_ctrl( Circuit , Delta_t , q_qbits , z_qbits , True )
-                Uc_P( Circuit , iq_qbits_idx , z_qbits_idx , j , dagger)
+                Uc_P( Circuit , iq_qbits_idx , z_qbits_idx , j , dagger )
             U0_q_ctrl( Circuit , -Delta_t*Q , q_qbits , z_qbits , True )
 
 
@@ -390,15 +421,15 @@ while t < final_time:
             for i in range(Q):
                 Circuit.append(Umap , iq_qbits[list(np.arange(i*L , (i+1)*L))])
         
-    def W_gate(Circuit , kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger = False):
+    def W_gate(Circuit , current_time , kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger = False):
         B_prepare( Circuit , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
         Uc_Phi( Circuit , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
-        Uc_Phi_Omega( Circuit , kq_qbits_idx , q_qbits_idx , dagger )
+        Uc_Phi_Omega( Circuit , current_time , kq_qbits_idx , q_qbits_idx , dagger )
         B_prepare( Circuit , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
 
-    def A_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index ):
+    def A_gate( Circuit , current_time , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index ):
         anc_qubits_index = 3
-        W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , False )
+        W_gate( Circuit , current_time , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , False )
         #R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
         #W_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , True )
         #R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
@@ -411,8 +442,8 @@ while t < final_time:
         print( f'time is {t}' )
         # print( f'the r number is: {r_number}' )
         for ri in range( r_number ):
-            Circuit.append( Diagonal_U0(Longit_h , Vx , -Delta_t) , z_qbits )
-            A_gate( Circuit , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index )
+            A_gate( Circuit , ri*Delta_t , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index )
+            Circuit.append( Diagonal_U0(Longit_h , Vx , Delta_t) , z_qbits )
             #W_gate( Circuit , 0 , 1 , 2 , 4 , False )
         # print( f'Circuit is prepared and ready for simulation' )
 
@@ -526,6 +557,17 @@ psi_exact_0 = [[0.823604 - 0.268856j, 0 , 0 , 0.413975 + 0.279316j] ,
              [-0.0238209 - 0.722283j, 0 , 0 , 0.0690068 - 0.687734j] , 
              [-0.324552 - 0.899476j, 0 , 0 , -0.288344 + 0.0496678j]]
 
+psi_exact_omega4 = [[.456039 - 0.721862j, 0. , 0. , -0.0901803 - 0.512652j] ,
+             [-0.338662 - 0.736527j, 0. , 0. , 0.0738845 - 0.580842j] , 
+             [-0.49287 - 0.12285j, 0. , 0. , 0.54837 - 0.664286j] ,
+             [0.147253 + 0.508321j, 0. , 0. , 0.680936 - 0.506213j] , 
+             [0.709955 + 0.303733j, 0. , 0. , 0.631881 - 0.0666097j] , 
+             [0.640457 - 0.525576j, 0. , 0., 0.558228 + 0.0443356j] , 
+             [-0.132654 - 0.991088j, 0., 0. , 0.000942253 + 0.0121182j] , 
+             [-0.789118 - 0.386051j, 0, 0, -0.457135 + 0.138872j] , 
+             [-0.754947 + 0.376479j, 0, 0., -0.52903 - 0.0919012j] , 
+             [-0.0825348 + 0.485335j, 0, 0, -0.64233 - 0.587409j]]
+
 psi_exact_small = [[-0.981414 + 0.0167519j, 0, 0, 0.00383924 - 0.19113j] ,
              [0.469779 + 0.00467553j, 0, 0, -0.0452865 - 0.881609j] , 
              [0-0.830634 + 0.0314374j, 0, 0, 0.0420445 + 0.554338j] ,
@@ -537,13 +579,38 @@ psi_exact_small = [[-0.981414 + 0.0167519j, 0, 0, 0.00383924 - 0.19113j] ,
              [0.94897 - 0.171533j, 0, 0, 0.0478432 + 0.260265j] , 
              [-0.949677 + 0.188929j, 0, 0, -0.0428947 - 0.246128j]]
 
-psi_exact = psi_exact_small
 
+psi_exact_zerodiag_omega4 = [[0.826124, 0., 0., 0. - 0.563489j] ,
+             [0.750956, 0., 0., 0. - 0.660352j] , 
+             [0.963633, 0., 0., 0. - 0.267227j] ,
+             [0.922869, 0., 0., 0. + 0.385112j] , 
+             [0.73382, 0., 0., 0. + 0.679344j] , 
+             [0.875362, 0., 0., 0. + 0.483467j] , 
+             [0.990377, 0., 0., 0. - 0.13839j] , 
+             [0.782639, 0., 0., 0. - 0.622476j] , 
+             [0.783341, 0., 0., 0. - 0.621593j] , 
+             [0.990718, 0 , 0 , 0. - 0.135927j]]
+
+psi_exact_smallomega = [[0.640457 - 0.525576j, 0 , 0 , 0.558228 + 0.0443356j] ,
+             [0.268854 - 0.676823j, 0 , 0 , -0.0684169 - 0.68187j] , 
+             [-0.158949 - 0.555924j, 0 , 0 , -0.694513 + 0.428177j] ,
+             [-0.0470942 - 0.492392j, 0 , 0 , 0.592035 + 0.63626j] , 
+             [-0.532703 - 0.72916j, 0 , 0 , 0.200048 - 0.380177j] , 
+             [-0.945272 - 0.104774j, 0 , 0 , -0.165173 + 0.261154j] , 
+             [-0.760328 + 0.570619j, 0 , 0 , 0.292833 - 0.10269j] , 
+             [-0.0650973 + 0.774783j, 0 , 0 , -0.623226 - 0.0840383j] , 
+             [-0.00361074 + 0.398326j, 0 , 0 , 0.0644 + 0.914973j] , 
+             [0.0880002 + 0.671348j, 0 , 0 , 0.687345 - 0.26288j]]
+
+psi_exact = psi_exact_zerodiag_omega4
+#psi_exact = psi_exact_0
+
+print(f'The length of psi_exact is {len(psi_exact)} and the length of psi_approximate is {len(psi_approx)} ')
 #psi_approx = psi_approx[1::]
 if(len(psi_exact) == len(psi_approx)):
     overlaps = []
     for i in range(len(psi_exact)):
-        overlaps.append(np.abs(np.dot(np.array(psi_approx[i]) , np.array(psi_exact[i])))**2)
+        overlaps.append(np.abs(np.dot(np.conjugate(np.array(psi_approx[i])) , np.array(psi_exact[i])))**2)
 
     plt.figure(figsize=(10, 6))
     plt.plot(time, overlaps, label='overlap', color='blue' , marker='x')
