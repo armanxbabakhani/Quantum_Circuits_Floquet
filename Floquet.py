@@ -169,7 +169,7 @@ while t < final_time:
 
     # Gammaf computes Gamma_i_q! if i_q is a vector it will return the multiplication of all the sub-gammas
 
-    #GDt = 0.05
+    # GDt = 0.05
 
     # These two functions are used if we manually prepare the state without state preparation call from qiskit built-in functions
     # For now, we will use qiskit built-in functions (so these functions are not used!)
