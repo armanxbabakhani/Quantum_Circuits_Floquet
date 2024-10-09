@@ -27,10 +27,10 @@ OffD_number = n-1 # number of permutations
 M = OffD_number
 C0 = 1.0 # Parameter for the floquet interaction strength
 Coeffs = C0*np.array([2+(-1)**(x+1) for x in np.arange(1,n)]) # there are n elements in this array
-Omega = 1.0
+Omega = 4.0
 h0 = 1.0 
 Longit_h = h0*np.array([1.5 + 0.5*(-1)**(x+1) for x in range(n)])
-Vx = 1.0 
+Vx = 3.0 
 p = 2 # number of periods
 K = 2 # number of frequencies per permutation
 C = np.max(Coeffs)
@@ -590,7 +590,7 @@ def Post_select_evolution(init_state , r):
     return evolved_states
 
 
-psi_approx = Post_select_evolution([1 , 0 , 0 , 0] , 10)
+psi_approx = Post_select_evolution([1 , 0 , 0 , 0] , 20)
 
 print(f'The simulation is done for Q = {Q} , n = {n} , Delta t = {Delta_t} , GammaDt = {GDt} , Omega = {Omega} , Vx = {Vx}')
 print(f' ')
