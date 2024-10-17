@@ -101,38 +101,27 @@ while t < final_time:
     #    return U0.to_gate() 
     
     def Diagonal_U0(hs , Vs , ev_time):
+        """
+        
+        Input #1 (hs): an array f doubles hopping strengths 
+        Input #2 (Vs): a coupling strength V for all the XX interactions
+        Input #3 (ev_time): the time of evolution
+
+        output: a unitary gate simulating the diagonal evolution U_0(t = ev_time)
+
+        """
+
         U0 = qk.QuantumCircuit(n + 1)
 
-        # For single Z rotations (with h_i):
-        # manually reverse the order of qubits:
-        #hs_rev = hs[::-1]
         for x in range(n):
-            #U0.rz(2*hs_rev[x]*ev_time , x)
             U0.rz(2*hs[x]*ev_time , x)
+
         # For two-body ZZ interactions (with V_x):
         for x in range(n-1):
             U0.cx(x , x+1)
             U0.rz(2*Vs*ev_time , x+1)
             U0.cx(x , x+1)
         return U0.to_gate()
-    
-    def Diagonal_U0_circ(Circuit , z_qbits_index,  hs , Vs , time):
-        z_qbits = Circuit.qregs[z_qbits_index]
-        # For single Z rotations (with h_i):
-        for x in range(n):
-            Circuit.cx(z_qbits[x] , z_qbits[n])
-        Circuit.rz(2*hs[x]*time , z_qbits[n])
-        for x in range(n):
-            Circuit.cx(z_qbits[x] , z_qbits[n])
-
-        # For two-body ZZ interactions (with V_x):
-        for x in range(n-1):
-            Circuit.cx(z_qbits[x] , z_qbits[n])
-            Circuit.cx(z_qbits[x + 1] , z_qbits[n])
-        Circuit.rz(2*Vs*time , z_qbits[n])
-        for x in range(n-1):
-            Circuit.cx(z_qbits[x] , z_qbits[n])
-            Circuit.cx(z_qbits[x + 1] , z_qbits[n])
 
     # ---------------- The REFLECTION (R) about the zero state of Q+1 registers -----------
     # Note: We may have to do this on (Q+1)*log2(M) registers instead to
@@ -166,10 +155,6 @@ while t < final_time:
             Circuit.x(q_qbits[i])
         Circuit.x(anc_qbit[0])
         # Useful functions:
-
-    # Gammaf computes Gamma_i_q! if i_q is a vector it will return the multiplication of all the sub-gammas
-
-    # GDt = 0.05
 
     # These two functions are used if we manually prepare the state without state preparation call from qiskit built-in functions
     # For now, we will use qiskit built-in functions (so these functions are not used!)
@@ -232,76 +217,66 @@ while t < final_time:
     # Note that iq_qbits register has Q*log2(n) number of qubits:
     #   The i_sub_idx is a variable to specify the permutation for the specific sub index of the iq_qbits
 
-    def Uc_P_old( Circuit , ctr_qbits_idx , targ_qbits_idx , i_sub_idx ):
-        # Assuming i_sub_idx refers to a specific block of register of size log2(n) qubits
-        if i_sub_idx > 0:
-            ctr_qbits = Circuit.qregs[ctr_qbits_idx]
-            targ_qbits = Circuit.qregs[targ_qbits_idx]
-            L = int(np.log2(n))
-            N_qbits = n + Q * L # Total qubits = z qubits + i_q qubits + k_q qubits
-            
-            ctr_qbits_subset = ctr_qbits[0:i_sub_idx*L]
-            Lctrs = len( ctr_qbits_subset )
-            
-            # Making the controlled XX gate for the specific number of controlled qubits
-            cxxcirc = qk.QuantumCircuit(2 , name='cXX')
-            cxxcirc.x( range(2) )
-            cxxGate = cxxcirc.to_gate()
-            cxxGate = cxxGate.control(Lctrs)
-            
-            for i in np.arange(1,n):
-                for k in range(i_sub_idx):
-                    ibin = bin(i + k*n)[2:]
-                    ibin = (Lctrs-len(ibin))*'0' +ibin 
-                    zer_ctrs = [x for x in range(Lctrs) if(int(ibin[Lctrs-1 - x]) == 0)]
-                    for j in range(len(zer_ctrs)):
-                        Circuit.x(ctr_qbits[zer_ctrs[j]])
-                    # This part needs to be fixed.. We need to 
-                    Circuit.append( cxxGate , ctr_qbits[0:Lctrs] + targ_qbits[i-1:i+1] )
-                    for j in range(len(zer_ctrs)):
-                        Circuit.x( ctr_qbits[zer_ctrs[j]] )
-
     def Uc_P( Circuit , ctr_qbits_idx , targ_qbits_idx , i_sub_idx , dagger):
+    """"
+    This is a void function creating a controlled permutation on the circuit
+
+    Input (int) #1 (ctr_qbits_idx): The index of the register for the controlled qubits
+    Input (int) #2 (targ_qbits_idx): The index of the register for the target qubits
+    Input (int) #3 (i_sub_idx): The sub-index (q) for the i_q register to generate the controlled qubit
+    Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of U_p or not 
+
+    """
     # Assuming i_sub_idx refers to a specific block of register of size log2(n) qubits
-        if i_sub_idx > 0:
-            ctr_qbits = Circuit.qregs[ctr_qbits_idx]
-            targ_qbits = Circuit.qregs[targ_qbits_idx]
-            L = int( np.log2(n) )
-            N_qbits = n + Q * L # Total qubits = z qubits + i_q qubits + k_q qubits
-            
-            ctr_qbits_subset = ctr_qbits[(i_sub_idx-1)*L:i_sub_idx*L]
-            # Making the controlled XX gate for the specific number of controlled qubits
-            cxxcirc = qk.QuantumCircuit(2 , name='cXX')
-            cxxcirc.x( range(2) )
-            cxxGate = cxxcirc.to_gate()
-            cxxGate = cxxGate.control(L)
-            
-            if dagger:
-                for i in np.arange(n-1 , 0 , -1):
-                    ibin = bin(i)[2:]
-                    zer_ctrs = [x for x in range(L) if(int(ibin[x]) == 0)]
-                    for j in range(len(zer_ctrs)):
-                        Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
-                    Circuit.append( cxxGate , ctr_qbits_subset[:] + targ_qbits[i-1:i+1] )
-                    for j in np.arange(len(zer_ctrs)-1 , -1 , -1):
-                        Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
-            else:
-                for i in np.arange(1,n):
-                    ibin = bin(i)[2:]
-                    #ibin = (Lctrs-len(ibin))*'0' +ibin 
-                    zer_ctrs = [x for x in range(L) if(int(ibin[x]) == 0)]
-                    for j in range(len(zer_ctrs)):
-                        Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
-                    # This part needs to be fixed.. We need to 
-                    Circuit.append( cxxGate , ctr_qbits_subset[:] + targ_qbits[i-1:i+1] )
-                    for j in range(len(zer_ctrs)):
-                        Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
+    if i_sub_idx > 0:
+        ctr_qbits = Circuit.qregs[ctr_qbits_idx]
+        targ_qbits = Circuit.qregs[targ_qbits_idx]
+        L = int( np.log2(n) )
+        N_qbits = n + Q * L # Total qubits = z qubits + i_q qubits + k_q qubits
+        
+        ctr_qbits_subset = ctr_qbits[(i_sub_idx-1)*L:i_sub_idx*L]
+        # Making the controlled XX gate for the specific number of controlled qubits
+        cxxcirc = qk.QuantumCircuit(2 , name='cXX')
+        cxxcirc.x( range(2) )
+        cxxGate = cxxcirc.to_gate()
+        cxxGate = cxxGate.control(L)
+        
+        if dagger:
+            for i in np.arange(n-1 , 0 , -1):
+                ibin = bin(i)[2:]
+                zer_ctrs = [x for x in range(L) if(int(ibin[x]) == 0)]
+                for j in range(len(zer_ctrs)):
+                    Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
+                Circuit.append( cxxGate , ctr_qbits_subset[:] + targ_qbits[i-1:i+1] )
+                for j in np.arange(len(zer_ctrs)-1 , -1 , -1):
+                    Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
+        else:
+            for i in np.arange(1,n):
+                ibin = bin(i)[2:]
+                #ibin = (Lctrs-len(ibin))*'0' +ibin 
+                zer_ctrs = [x for x in range(L) if(int(ibin[x]) == 0)]
+                for j in range(len(zer_ctrs)):
+                    Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
+                # This part needs to be fixed.. We need to 
+                Circuit.append( cxxGate , ctr_qbits_subset[:] + targ_qbits[i-1:i+1] )
+                for j in range(len(zer_ctrs)):
+                    Circuit.x( ctr_qbits_subset[zer_ctrs[j]] )
 
     # =============================== The controlled unitary Uc_Phi =================================== #
     # UC_Phi_Omega(k_qbits) generates the omega related phases on the k_q registers
     # The only thing that needs to be tested in the Uc_Phi_Omega!
 
     def Uc_Phi_Omega(Circuit , current_time , k_qbits_idx , q_qbits_idx , dagger= False):
+        """"
+        This is a void function creating the omega dependent rotations 
+
+        Input (QuantumCircuit) #0: The void variable which is a quantum circuit on which U_c\omega is appended
+        Input (double) #1 (current_time): Specifying the current time
+        Input (int) #2 (k_qbits_idx): The index of the register for the k qubits
+        Input (int) #3 (q_qbits_idx): The sub-index (q) for the i_q register to generate the controlled qubit
+        Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
+
+        """
         # Apply i\omega \sum_l=j^q (-1)^k_l
         # Omega is a global variable
         k_qbits = Circuit.qregs[k_qbits_idx]
@@ -326,28 +301,17 @@ while t < final_time:
                     for lk in np.arange(1 , l+1):
                         Circuit.crz(-delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l - lk])
 
-    def Uc_Phi_Omega_old(Circuit , k_qbits_idx , q_qbits_idx , dagger= False):
-        # Apply i\omega \sum_l=j^q (-1)^k_l
-        # Omega is a global variable
-        k_qbits = Circuit.qregs[k_qbits_idx]
-        q_qbits = Circuit.qregs[q_qbits_idx]
-        
-        delta = -2*Omega*Delta_t # Dividing the angle by 2 for rz
-        
-        if dagger:
-            for l in range(len(k_qbits)-1 , - 1 , -1):
-                if l > 0:
-                    for lk in range(l , -1 , 0):
-                        Circuit.crz( delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l-lk])
-                Circuit.crz( -(l+1)*delta/(l+2) , q_qbits[l]  , k_qbits[l])
-        else:
-            for l in range(len(k_qbits)):
-                Circuit.crz((l+1)*delta/(l+2) , q_qbits[l] , k_qbits[l])
-                if l > 0:
-                    for lk in np.arange(1 , l+1):
-                        Circuit.crz(-delta/((lk+2)*(lk+1)) , q_qbits[l] , k_qbits[l - lk])
-
     def U0_q_ctrl( Circuit , delta_t , q_qbits , z_qbits , dagger=False):
+        """"
+        This is a void function creating the q-dependent controlled diagonal rotations 
+
+        Input (QuantumCircuit) #0: The void variable which is a quantum circuit on which U_c\omega is appended
+        Input (double) #1 (delta_t): Specifying the rotation amount, for which a U_0( delta_t/(q+1) ) will be applied 
+        Input (int) #2 (q_qbits): The quantum register (not the index) of the q qubits
+        Input (int) #3 (z_qbits): The quantum register of the z qubits
+        Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
+
+        """
         if dagger:
            for k in range(len(q_qbits)-1 , 0 , -1):
                CUk = Diagonal_U0( Longit_h , Vx , delta_t/((k+1)*(k+2)) )
@@ -367,6 +331,17 @@ while t < final_time:
 
     # UC_Phi(iq_qbits , z_qbits , q) generates the E_z_iq and E_z_ij related phases on |z>
     def Uc_Phi(Circuit  , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
+        """
+        This is a void function creating the q-dependent controlled rotations due to the off-diagonal expansion.
+
+        Input (QuantumCircuit) #0: The void variable which is a quantum circuit on which U_c\omega is appended
+        Input (int) #1 (iq_qbits_idx): The index of the register of the |i_q> qubits
+        Input (int) #2 (z_qbits_idx): The index of the register of the |z> qubits
+        Input (int) #3 (q_qbits_idx): The index of the register of the |q> qubits
+        Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
+        
+        """
+
         iq_qbits = Circuit.qregs[iq_qbits_idx]
         q_qbits = Circuit.qregs[q_qbits_idx]
         z_qbits = Circuit.qregs[z_qbits_idx]
@@ -391,6 +366,18 @@ while t < final_time:
 
 
     def B_prepare(Circuit , kq_qbits_idx , iq_qbits_idx , q_qbits_idx ,  dagger=False):
+        
+        """
+        This is a void function preparing the states on |i_q> , |k_q> , and |q> registers.
+
+        Input (QuantumCircuit) #0: The void variable which is a quantum circuit on which U_c\omega is appended
+        Input (int) #1 (kq_qbits_idx): The index of the register of the |k_q> qubits
+        Input (int) #2 (iq_qbits_idx): The index of the register of the |i_q> qubits
+        Input (int) #3 (q_qbits_idx): The index of the register of the |q> qubits
+        Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
+        
+        """
+
         mapping_vec = np.zeros((1 , n-1))
         for i in np.arange(1,n):
             mapping_vec[0][i-1] = np.sqrt( Gammaf([i]) )
@@ -405,8 +392,8 @@ while t < final_time:
         Umap = UnitMap(mapping_vec , False)
         
         if dagger:
-            #for i in range(Q-1 , -1 , -1):
-            #    Circuit.append(Umapdag , iq_qbits[list(np.arange(i*L , (i+1)*L))])
+            for i in range(Q-1 , -1 , -1):
+                Circuit.append(Umapdag , iq_qbits[list(np.arange(i*L , (i+1)*L))])
             for i in range(Q-1 , -1 , -1):
                 Circuit.ch(iq_qbits[i*L] , kq_qbits[i])
             for i in range(Q-1 , -1 , -1):
@@ -419,8 +406,8 @@ while t < final_time:
                 Circuit.ch(iq_qbits[i*L] , kq_qbits[i])
             for i in range(Q):
                 Circuit.cx(iq_qbits[i*L] , q_qbits[i])
-            #for i in range(Q):
-            #    Circuit.append(Umap , iq_qbits[list(np.arange(i*L , (i+1)*L))])
+            for i in range(Q):
+                Circuit.append(Umap , iq_qbits[list(np.arange(i*L , (i+1)*L))])
         
     def W_gate(Circuit , current_time , kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger = False):
         B_prepare( Circuit , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
