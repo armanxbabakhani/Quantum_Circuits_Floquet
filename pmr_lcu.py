@@ -36,27 +36,27 @@ def Diagonal_U0(hs , Vs , ev_time):
 # =================================================================================== #
 # ------------------------------ LCU State preparation ------------------------------ #
 
-def Q_angle(Q_max , GDt , i):
+def Q_angle(Q_max , GammaDt , i):
     angle = 0.0
     for q in np.arange(1 , Q_max - i+1):
-        angle += GDt**(q) / math.factorial(q + i)
+        angle += GammaDt**(q) / math.factorial(q + i)
     angle *= math.factorial(i)
     angle = np.sqrt(angle)
 
     return np.arctan(angle)
 
 
-def UQ_circuit(Q_max , number_of_spins , dagger=False):
+def UQ_circuit(Q_max , number_of_spins , GammaDt , dagger=False):
     L = int(np.log2(number_of_spins))
     uq = qk.QuantumCircuit(Q_max*L)
     if dagger:
         for q in range(Q_max-1 , 0 , -1):
-            uq.cry(-2.0*Q_angle(Q_max , q) , (q-1)*L , q*L)
-        uq.ry(-2.0*Q_angle(Q_max , 0) , 0)  
+            uq.cry(-2.0*Q_angle(Q_max , GammaDt , q) , (q-1)*L , q*L)
+        uq.ry(-2.0*Q_angle(Q_max , GammaDt , 0) , 0)  
     else:
-        uq.ry(2.0*Q_angle(Q_max , 0) , 0)
+        uq.ry(2.0*Q_angle(Q_max , GammaDt , 0) , 0)
         for q in np.arange(1,Q_max):
-            uq.cry(2.0*Q_angle(Q_max , q) , (q-1)*L , q*L) 
+            uq.cry(2.0*Q_angle(Q_max , GammaDt , q) , (q-1)*L , q*L) 
     return uq
 
 # Creating a unitary matrix out of a column vector using the Householder matrix
@@ -81,7 +81,7 @@ def UnitMap(vec , dagger=False):
     return UnitaryGate(U)
 
 
-def B_prepare(Circuit , number_of_spins , Q_max , Gamma_function , kq_qbits_idx , iq_qbits_idx , q_qbits_idx ,  dagger=False):
+def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx ,  dagger=False):
         
     """
     This is a void function preparing the states on |i_q> , |k_q> , and |q> registers.
@@ -89,46 +89,83 @@ def B_prepare(Circuit , number_of_spins , Q_max , Gamma_function , kq_qbits_idx 
     Input (QuantumCircuit) #0: The void variable which is a quantum circuit on which U_c\omega is appended
     Input (int) #1 (number_of_spins): The number of spins of the system
     Input (int) #2 (Q_max): The maximum expansion order Q
-    Input (int) #3 (Gamma_function): The function specifying the off-diagonal coefficients of the Hamiltonian
-    Input (int) #4 (kq_qbits_idx): The index of the register of the |k_q> qubits
-    Input (int) #5 (iq_qbits_idx): The index of the register of the |i_q> qubits
-    Input (int) #3 (q_qbits_idx): The index of the register of the |q> qubits
-    Input (bool) #7 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
+    Input (float) #3 (GammaDt): The parameter Gamma*Delta_t that specifies the simulation parameter.
+    Input (fnc) #4 (Gamma_function): The function specifying the off-diagonal coefficients of the Hamiltonian
+    Input (int) #5 (kq_qbits_idx): The index of the register of the |k_q> qubits
+    Input (int) #6 (iq_qbits_idx): The index of the register of the |i_q> qubits
+    Input (int) #7 (q_qbits_idx): The index of the register of the |q> qubits
+    Input (bool) #8 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
     
     """
-    n = number_of_spins
-    L = int( np.log2(n) )
-    Q = Q_max
-    mapping_vec = np.zeros((1 , n-1))
+    Gamma_i , Gamma_k = Gamma_list
+    M = len(Gamma_i)
+    LM = int( np.log2(M) )
+    K = len(Gamma_k)
+    LK = int( np.log2(K) )
 
-    for i in np.arange(1,n):
-        mapping_vec[0][i-1] = np.sqrt( Gamma_function([i]) )
-    mapping_vec[0] = mapping_vec[0]/np.sqrt( np.dot(mapping_vec[0],mapping_vec[0]) )
-        
     iq_qbits = Circuit.qregs[iq_qbits_idx]
     kq_qbits = Circuit.qregs[kq_qbits_idx]
     q_qbits = Circuit.qregs[q_qbits_idx]
 
-    Umapdag = UnitMap(mapping_vec , True)
-    Umap = UnitMap(mapping_vec , False)
+    Gamma_1 = np.sum(Gamma_i)
+    Gamma_2 = np.sum(Gamma_k)
+    Gamma = Gamma_1 * Gamma_2 
+    GDt = Gamma*Delta_t
+    Q = Q_max
+
+    # Generating the initial rotation:
+    if dagger:
+        for q in range(Q-1 , 0 , -1):
+            Circuit.cry(-2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
+        Circuit.ry(-2.0*Q_angle(Q , GDt , 0) , iq_qbits[0])  
+    else:
+        Circuit.ry(2.0*Q_angle(Q , GDt , 0) , iq_qbits[0]) 
+        for q in np.arange(1, Q):
+            Circuit.cry(2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
+
+    # Generating the B_k rotation:
+    MappingVecBk = np.zeros((1 , K))
+    for i in range(K):
+        MappingVecBk[0][i] = np.sqrt( Gamma_k[i] / Gamma_2 )
+
+    # The B_k rotations are controlled rotations!
+    UmapBkdag = UnitMap(MappingVecB , True).control(1)
+    UmapBk = UnitMap(MappingVecB , False).control(1)
+
+
+    # Generating the B_i(2) rotation:
+    MappingVecBi2 = np.zeros((1 , M))
+    for i in range(K):
+        MappingVecBi2[0][i] = np.sqrt( Gamma_i[i] / Gamma_1 )
+
+    UmapBi2dag = UnitMap(MappingVecBi2 , True).control(1)
+    UmapBi2 = UnitMap(MappingVecBi2 , False).control(1)
     
     if dagger:
         for i in range(Q-1 , -1 , -1):
-            Circuit.append(Umapdag , iq_qbits[list(np.arange(i*L , (i+1)*L))])
+            Circuit.append(UmapBi2dag , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
+        # Applying controlled B_k rotations
         for i in range(Q-1 , -1 , -1):
-            Circuit.ch(iq_qbits[i*L] , kq_qbits[i])
+            Circuit.append(UmapBdag , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
         for i in range(Q-1 , -1 , -1):
-            Circuit.cx(iq_qbits[i*L] , q_qbits[i])
-        Circuit.append(UQ_circuit(Q , n , dagger) , iq_qbits)
+            Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
+        # Applying the initial rotations on |i_q> register (uncompute):
+        for q in range(Q-1 , 0 , -1):
+            Circuit.cry(-2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
+        Circuit.ry(-2.0*Q_angle(Q , GDt , 0) , iq_qbits[0])
 
     else:
-        Circuit.append(UQ_circuit(Q , n , dagger) , iq_qbits)
+        # Applying the initial rotations on the |i_q> register:
+        Circuit.ry(2.0*Q_angle(Q , GDt , 0) , iq_qbits[0]) 
+        for q in np.arange(1, Q):
+            Circuit.cry(2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
+        # Applying the controlled B_k rotations:
         for i in range(Q):
-            Circuit.ch(iq_qbits[i*L] , kq_qbits[i])
+            Circuit.append(UmapB , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
         for i in range(Q):
-            Circuit.cx(iq_qbits[i*L] , q_qbits[i])
+            Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
         for i in range(Q):
-            Circuit.append(Umap , iq_qbits[list(np.arange(i*L , (i+1)*L))])
+            Circuit.append(UmapBi2 , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
 
 
 # =================================================================================== #
@@ -153,10 +190,11 @@ def Uc_P( Circuit , number_of_spins , ctr_qbits_idx , targ_qbits_idx , i_sub_idx
     """"
     This is a void function creating a controlled permutation on the circuit
 
-    Input (int) #1 (ctr_qbits_idx): The index of the register for the controlled qubits
-    Input (int) #2 (targ_qbits_idx): The index of the register for the target qubits
-    Input (int) #3 (i_sub_idx): The sub-index (q) for the i_q register to generate the controlled qubit
-    Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of U_p or not 
+    Input (int) #1 (number_of_spins): The number of spins for the system
+    Input (int) #2 (ctr_qbits_idx): The index of the register for the controlled qubits
+    Input (int) #3 (targ_qbits_idx): The index of the register for the target qubits
+    Input (int) #4 (i_sub_idx): The sub-index (q) for the i_q register to generate the controlled qubit
+    Input (bool) #5 (dagger): Speficies whether the gate is hermitian conjugate of U_p or not
 
     """
 
@@ -225,7 +263,7 @@ def U0_q_ctrl( Circuit , delta_t , q_qbits , z_qbits , dagger=False):
             Circuit.append( CUk , [q_qbits[k]] + z_qbits[:] )
 
 # UC_Phi(iq_qbits , z_qbits , q) generates the E_z_iq and E_z_ij related phases on |z>
-def Uc_Phi(Circuit  , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
+def Uc_Phi(Circuit , Delta_t , Q , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
     """
     This is a void function creating the q-dependent controlled rotations due to the off-diagonal expansion.
 
@@ -263,11 +301,12 @@ def Uc_Phi(Circuit  , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
 # =================================================================================== #
 # ---------------------- Generating the off-diagonal unitary ------------------------ #
 
-def W_gate(Circuit , number_of_spins , Q_max , current_time , Gamma_function , kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger = False):
-    B_prepare( Circuit , number_of_spins , Q_max , Gamma_function , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
-    Uc_Phi( Circuit , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
-    Uc_Phi_Omega( Circuit , current_time , kq_qbits_idx , q_qbits_idx , dagger )
-    B_prepare( Circuit , number_of_spins , Q_max , Gamma_function , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
+def W_gate(Circuit , number_of_spins , Q_max , current_time , Delta_t , Omega , Gamma_list , kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger = False):
+    Gamma = np.max(Gamma_list)
+    B_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
+    Uc_Phi( Circuit , Delta_t , Q_max , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
+    Uc_Phi_Omega( Circuit , Omega*Delta_t , current_time , kq_qbits_idx , q_qbits_idx , dagger )
+    B_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
 
 # =================================================================================== #
 # ------------------------ Amplitude Amplification functions ------------------------ #
@@ -302,7 +341,7 @@ def R_gate(Circuit , kq_qbits_idx , iq_qbits_idx , anc_qbit_idx , q_qbits_idx):
         Circuit.x(q_qbits[i])
     Circuit.x(anc_qbit[0])
 
-def A_gate( Circuit , number_of_spins , Q_max , current_time , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index ):
+def A_gate( Circuit , number_of_spins , Q_max , current_time , GammaDt , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index ):
     anc_qubits_index = 3
     W_gate(Circuit , number_of_spins , Q_max , current_time , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbits_index , False)
     R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
@@ -310,13 +349,13 @@ def A_gate( Circuit , number_of_spins , Q_max , current_time , Gamma_function , 
     R_gate( Circuit , kq_qbits_index , iq_qbits_index , anc_qubits_index , q_qbit_index )
     W_gate(Circuit , number_of_spins , Q_max , current_time , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbits_index , False)
 
-def Prepare_full_unitary( Circuit , number_of_spins , Q_max , current_time , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , r_number ):
+def Prepare_full_unitary( Circuit , number_of_spins , Q_max , current_time , GammaDt , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index , r_number ):
     kq_qbits = Circuit.qregs[kq_qbits_index]
     iq_qbits = Circuit.qregs[iq_qbits_index]
     z_qbits = Circuit.qregs[z_qbits_index]
 
     for ri in range( r_number ):
-        A_gate( Circuit , number_of_spins , Q_max , ri*Delta_t , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index )
+        A_gate( Circuit , number_of_spins , Q_max , ri*Delta_t , GammaDt , Gamma_function , kq_qbits_index , iq_qbits_index , z_qbits_index , q_qbit_index )
         Circuit.append( Diagonal_U0(Longit_h , Vx , Delta_t) , z_qbits )
 
 
