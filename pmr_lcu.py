@@ -115,7 +115,7 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
     else:
         Log2M = np.log2(M)
         LM = int(np.ceil(Log2M))
-    MDisc = int(2**LM - M) 
+    MDisc = int(2**LM - M)-1 
 
     if K < 2:
         LK = 1
@@ -164,6 +164,7 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
     # Generating the B_i(2) rotation:
     # It is assumed that M < 2**n , where n is an integer!
     MappingVecBi2 = np.zeros((1 , int(2**LM) - 1))
+    print(f'Mdisc is {MDisc} and LM is {LM}')
     for i in range(M):
         MappingVecBi2[0][i+MDisc] = np.sqrt( Gamma_i[i] / Gamma_1 )
 
@@ -176,8 +177,9 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
         # Applying controlled B_k rotations
         for i in range(Q-1 , -1 , -1):
             Circuit.append(UmapBkdag ,  kq_qbits[list(np.arange(i*LK , (i+1)*LK))])
-            Circuit.cx(iq_qbits[i*LM] , k_qbits[i*LK])
+            Circuit.cx(iq_qbits[i*LM] , kq_qbits[i*LK])
         for i in range(Q-1 , -1 , -1):
+            Circuit.append(UmapBkdag , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
             Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
         # Applying the initial rotations on |i_q> register (uncompute):
         for q in range(Q-1 , 0 , -1):
@@ -190,9 +192,9 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
             Circuit.cry(2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
         # Applying the controlled B_k rotations:
         for i in range(Q):
-            Circuit.cx(iq_qbits[i*LM] , k_qbits[i*LK])
-            Circuit.append(UmapBk ,  kq_qbits[list(np.arange(i*LK , (i+1)*LK))])
-            #Circuit.append(UmapB , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
+            Circuit.cx(iq_qbits[i*LM] , kq_qbits[i*LK])
+            #Circuit.append(UmapBk ,  kq_qbits[list(np.arange(i*LK , (i+1)*LK))])
+            Circuit.append(UmapBk , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
         for i in range(Q):
             Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
         for i in range(Q):
