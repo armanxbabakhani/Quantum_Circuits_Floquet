@@ -72,19 +72,18 @@ def create_unitary(v):
 
 def create_unitary_from_vector(vec, dagger=False):
     U = create_unitary(vec)
+    print(f'The unitary built in create unitary is {U}')
     if dagger:
         U = U.conj().T
     return UnitaryGate(U)
 
 def create_unitary_map_for_permutation_states(vec , dagger=False):
     N = vec[0].size
-    Nceil = np.ceil(np.log2(N))
-    Ndiff = Nceil - N
-    U = np.zeros((N,N))
+
+    U = np.zeros((N+1,N+1))
     U[0][0] = 1.0
     
     unit = create_unitary(vec)
-    print(f'inside of the permutation states unitary, the vec is {vec}')
     U[1: , 1:] = unit
     if dagger:
         U = U.conj().T
@@ -134,16 +133,6 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
     GDt = Gamma*Delta_t
     Q = Q_max
 
-    # Generating the initial rotation:
-    if dagger:
-        for q in range(Q-1 , 0 , -1):
-            Circuit.cry(-2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
-        Circuit.ry(-2.0*Q_angle(Q , GDt , 0) , iq_qbits[0])  
-    else:
-        Circuit.ry(2.0*Q_angle(Q , GDt , 0) , iq_qbits[0]) 
-        for q in np.arange(1, Q):
-            Circuit.cry(2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
-
     # Generating the B_k rotation:
     MappingVecBk = np.zeros((1 , int(2**LK)))
     if KDisc == 0:
@@ -156,7 +145,6 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
 
     # The B_k rotations are controlled rotations!
     # These rotations dont need to be controlled! CNOT_j U CNOT_j can be applied CU_j! 
-    
     UmapBkdag = create_unitary_from_vector(MappingVecBk , True).control(1)
     UmapBk = create_unitary_from_vector(MappingVecBk , False).control(1)
 
@@ -164,7 +152,6 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
     # Generating the B_i(2) rotation:
     # It is assumed that M < 2**n , where n is an integer!
     MappingVecBi2 = np.zeros((1 , int(2**LM) - 1))
-    print(f'Mdisc is {MDisc} and LM is {LM}')
     for i in range(M):
         MappingVecBi2[0][i+MDisc] = np.sqrt( Gamma_i[i] / Gamma_1 )
 
@@ -173,13 +160,12 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
     
     if dagger:
         for i in range(Q-1 , -1 , -1):
-            Circuit.append(UmapBi2dag , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
+            # If M = 1, then there is only one type of permutation, so the additional rotation is not required!
+            if M > 1:
+                Circuit.append(UmapBi2dag , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
         # Applying controlled B_k rotations
         for i in range(Q-1 , -1 , -1):
-            Circuit.append(UmapBkdag ,  kq_qbits[list(np.arange(i*LK , (i+1)*LK))])
-            Circuit.cx(iq_qbits[i*LM] , kq_qbits[i*LK])
-        for i in range(Q-1 , -1 , -1):
-            Circuit.append(UmapBkdag , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
+            Circuit.append(UmapBkdag , iq_qbits[i*LM] , [kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
             Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
         # Applying the initial rotations on |i_q> register (uncompute):
         for q in range(Q-1 , 0 , -1):
@@ -192,13 +178,14 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
             Circuit.cry(2.0*Q_angle(Q , GDt , q) , iq_qbits[(q-1)*LM] , iq_qbits[q*LM])
         # Applying the controlled B_k rotations:
         for i in range(Q):
-            Circuit.cx(iq_qbits[i*LM] , kq_qbits[i*LK])
+            Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
             #Circuit.append(UmapBk ,  kq_qbits[list(np.arange(i*LK , (i+1)*LK))])
             Circuit.append(UmapBk , [iq_qbits[i*LM] , kq_qbits[list(np.arange(i*LK , (i+1)*LK))]])
         for i in range(Q):
-            Circuit.cx(iq_qbits[i*LM] , q_qbits[i])
-        for i in range(Q):
-            Circuit.append(UmapBi2 , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
+            # If M = 1, then there is only one type of permutation, so the additional rotation is not required!
+            if M > 1:
+                print('M is greater than 1')
+                Circuit.append(UmapBi2 , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
 
 
 # =================================================================================== #
@@ -396,17 +383,21 @@ def Prepare_full_unitary( Circuit , number_of_spins , Q_max , current_time , Gam
 # =================================================================================== #
 # ------------------------ State initialization and readouts ------------------------ #
 
-def Make_initial_state(init_zstate , number_of_spins , Q_max):
-    K = 2 # Only two exponential diagonal entries for cos(omega t)
-    Nkq = int(np.log2(K)) * Q
-    Niq = int(np.log2(number_of_spins)) * Q
+def make_initial_state(init_zstate , number_of_spins , Q_max , M , K):
+    Q = Q_max
+    if M < 2:
+        Niq = Q
+    else:
+        Niq = int(np.ceil(np.log2(M))) * Q
+
+    Nkq = int(np.ceil(np.log2(K))) * Q
 
     psi_init_z = Statevector(init_zstate)
     psi_init_z = psi_init_z / np.linalg.norm(psi_init_z)
 
     total_circ_state = Statevector.from_label( '0' * Q)
-    total_circ_state = total_circ_state.tensor( Statevector.from_label( '0' * 2 ) ) # Two ancillas !
-    total_circ_state = total_circ_state.tensor( psi_init_z )
+    #total_circ_state = total_circ_state.tensor( Statevector.from_label( '0' * 2 ) ) # Two ancillas !
+    #total_circ_state = total_circ_state.tensor( psi_init_z )
     total_circ_state = total_circ_state.tensor( Statevector.from_label( '0' * Niq ) )
     total_circ_state = total_circ_state.tensor( Statevector.from_label( '0' * Nkq ) )
 
