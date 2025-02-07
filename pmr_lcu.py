@@ -8,9 +8,7 @@ from qiskit.circuit.library import GlobalPhaseGate
 from qiskit.extensions import Initialize , UnitaryGate
 from qiskit.providers.aer import AerSimulator
 
-
-
-def Diagonal_U0(DiagonalParams , EvolutionTime):
+def diagonal_unitary(DiagonalParams , EvolutionTime):
     """
     
     Input #1 (hs): an array f doubles hopping strengths 
@@ -23,18 +21,19 @@ def Diagonal_U0(DiagonalParams , EvolutionTime):
 
     hs = DiagonalParams[0]
     Vx = DiagonalParams[1]
-    U0 = qk.QuantumCircuit(n + 1)
 
     # The number of spins is specified by the number of diagonal h_i Z_i terms
     NumberOfSpins = len(hs)
+    U0 = qk.QuantumCircuit(NumberOfSpins)
 
     for x in range(NumberOfSpins):
         U0.rz(2*hs[x]*EvolutionTime , x)
 
     # For two-body ZZ interactions (with V_x):
-    for x in range(n-1):
+    NumberOfPermutations = len(Vx)
+    for x in range(NumberOfPermutations):
         U0.cx(x , x+1)
-        U0.rz(2*Vx*EvolutionTime , x+1)
+        U0.rz(2*Vx[x]*EvolutionTime , x+1)
         U0.cx(x , x+1)
     return U0.to_gate()
 
@@ -77,7 +76,6 @@ def create_unitary(v):
 
 def create_unitary_from_vector(vec, dagger=False):
     U = create_unitary(vec)
-    print(f'The unitary built in create unitary is {U}')
     if dagger:
         U = U.conj().T
     return UnitaryGate(U)
@@ -94,7 +92,7 @@ def create_unitary_map_for_permutation_states(vec , dagger=False):
         U = U.conj().T
     return UnitaryGate(U)
 
-def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx ,  dagger=False):
+def B_state_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx ,  dagger=False):
         
     """
     This is a void function preparing the states on |i_q> , |k_q> , and |q> registers.
@@ -189,7 +187,6 @@ def B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_i
         for i in range(Q):
             # If M = 1, then there is only one type of permutation, so the additional rotation is not required!
             if M > 1:
-                print('M is greater than 1')
                 Circuit.append(UmapBi2 , iq_qbits[list(np.arange(i*LM , (i+1)*LM))])
 
 
@@ -275,23 +272,23 @@ def U0_q_ctrl( Circuit , DiagonalParams , delta_t , q_qbits , z_qbits , dagger=F
 
     """
 
-    Longit_h = DiagonalParams[0]
-    Vx = DiagonalParmas[1]
+    #Longit_h = DiagonalParams[0]
+    #Vx = DiagonalParams[1]
 
     if dagger:
         for k in range(len(q_qbits)-1 , 0 , -1):
-            CUk = Diagonal_U0( Longit_h , Vx , delta_t/((k+1)*(k+2)) )
+            CUk = diagonal_unitary( DiagonalParams , delta_t/((k+1)*(k+2)) )
             CUk = CUk.control()
             Circuit.append( CUk , [q_qbits[k]] + z_qbits[:] )
-        CU0 = Diagonal_U0( Longit_h , Vx , -delta_t/(2.0) )
+        CU0 = diagonal_unitary( DiagonalParams , -delta_t/(2.0) )
         CU0 = CU0.control()
         Circuit.append( CU0 , [q_qbits[0]] + z_qbits[:] )
     else:
-        CU0 = Diagonal_U0( Longit_h , Vx , delta_t/(2.0) )
+        CU0 = diagonal_unitary( DiagonalParams , delta_t/(2.0) )
         CU0 = CU0.control()
         Circuit.append( CU0 , [q_qbits[0]] + z_qbits[:] )
         for k in np.arange(1, len(q_qbits)):
-            CUk = Diagonal_U0( Longit_h , Vx , -delta_t/((k+1)*(k+2)) )
+            CUk = diagonal_unitary( DiagonalParams , -delta_t/((k+1)*(k+2)) )
             CUk = CUk.control()
             Circuit.append( CUk , [q_qbits[k]] + z_qbits[:] )
 
@@ -335,7 +332,7 @@ def Uc_Phi_Omega(Circuit , Omega , Delta_t , current_time , k_qbits_idx , q_qbit
 
 
 # UC_Phi(iq_qbits , z_qbits , q) generates the E_z_iq and E_z_ij related phases on |z>
-def Uc_Phi(Circuit , NumberOfPermutations , Delta_t , Q , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
+def Uc_Phi(Circuit , NumberOfPermutations , DiagonalParams , Delta_t , Q , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger=False):
     
     """
 
@@ -356,10 +353,10 @@ def Uc_Phi(Circuit , NumberOfPermutations , Delta_t , Q , iq_qbits_idx , z_qbits
     liq = iq_qbits.size
     if dagger:
         #Circuit.append( Diagonal_U0( Longit_h , Vx , Delta_t ) , z_qbits )
-        U0_q_ctrl( Circuit , -Delta_t*Q , q_qbits , z_qbits , True)
+        U0_q_ctrl( Circuit , DiagonalParams , -Delta_t*Q , q_qbits , z_qbits , True)
         for j in range(Q , 0 , -1):
             Uc_P( Circuit , M , iq_qbits_idx , z_qbits_idx , j , dagger )
-            U0_q_ctrl( Circuit , Delta_t , q_qbits , z_qbits , True )
+            U0_q_ctrl( Circuit , DiagonalParams , Delta_t , q_qbits , z_qbits , True )
 
             Circuit.cp( np.pi , q_qbits[j-1] , z_qbits[0] )
             Circuit.crz( -np.pi , q_qbits[j-1] , z_qbits[0] )
@@ -368,15 +365,15 @@ def Uc_Phi(Circuit , NumberOfPermutations , Delta_t , Q , iq_qbits_idx , z_qbits
             Circuit.crz( np.pi , q_qbits[j-1] , z_qbits[0] )
             Circuit.cp( -np.pi , q_qbits[j-1] , z_qbits[0] )
 
-            U0_q_ctrl( Circuit , Delta_t , q_qbits , z_qbits , False )
+            U0_q_ctrl( Circuit , DiagonalParams , Delta_t , q_qbits , z_qbits , False )
             Uc_P( Circuit , M , iq_qbits_idx , z_qbits_idx , j , dagger )
-        U0_q_ctrl( Circuit , -Delta_t*Q , q_qbits , z_qbits , False )
+        U0_q_ctrl( Circuit , DiagonalParams , -Delta_t*Q , q_qbits , z_qbits , False )
 
 
 # =================================================================================== #
 # ---------------------- Generating the off-diagonal unitary ------------------------ #
 
-def W_gate(Circuit , current_time , Delta_t , Omega , Gamma_list , RegisterIndices , dagger = False):
+def W_gate(Circuit , current_time , DiagonalParams , Delta_t , Omega , Gamma_list , RegisterIndices , dagger = False):
     [kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , anc_qbits_idx] = RegisterIndices
     zRegister = Circuit.qregs[z_qbits_idx]
     qRegister = Circuit.qregs[q_qbits_idx]
@@ -384,10 +381,10 @@ def W_gate(Circuit , current_time , Delta_t , Omega , Gamma_list , RegisterIndic
     NumberOfSpins = zRegister.size - 1  # One of the qubits in the zRegister is used as an ancilla! We might be able to remove this as it is unnecessary.
     NumberOfPermutations = len(Gamma_list[0])
 
-    B_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
-    Uc_Phi( Circuit , NumberOfPermutations , Delta_t , Q_max , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
+    B_state_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
+    Uc_Phi( Circuit , NumberOfPermutations , DiagonalParams , Delta_t , Q_max , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
     Uc_Phi_Omega( Circuit , Omega , Delta_t , current_time , kq_qbits_idx , q_qbits_idx , dagger )
-    B_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
+    B_state_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
 
 # =================================================================================== #
 # ------------------------ Amplitude Amplification functions ------------------------ #
@@ -422,21 +419,28 @@ def R_gate(Circuit , RegisterIndices):
         Circuit.x(q_qbits[i])
     Circuit.x(anc_qbit[0])
 
-def A_gate( Circuit , current_time , Omega , Gamma_list , RegisterIndices):
-    W_gate( Circuit , current_time , Delta_t , Omega , Gamma_list , RegisterIndices , False )
+def A_gate( Circuit , DiagonalParams , current_time , Omega , Delta_t , Gamma_list , RegisterIndices):
+    W_gate( Circuit , current_time , DiagonalParams , Delta_t , Omega , Gamma_list , RegisterIndices , False )
     R_gate( Circuit , RegisterIndices )
-    W_gate( Circuit , current_time , Delta_t , Omega , Gamma_list , RegisterIndices , True )
+    W_gate( Circuit , current_time , DiagonalParams , Delta_t , Omega , Gamma_list , RegisterIndices , True )
     R_gate( Circuit , RegisterIndices )
-    W_gate( Circuit , current_time , Delta_t , Omega , Gamma_list , RegisterIndices , False )
+    W_gate( Circuit , current_time , DiagonalParams , Delta_t , Omega , Gamma_list , RegisterIndices , False )
 
-def Prepare_full_unitary( Circuit , DiagonalParams , current_time , Omega , Delta_t , Gamma_list , RegisterIndices , NumberOfSteps ):
+def Prepare_full_unitary_wo_Rgate( Circuit , DiagonalParams , Omega , Delta_t , Gamma_list , RegisterIndices , NumberOfSteps ):
     [kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , anc_qbits_idx] = RegisterIndices
-    z_qbits = Circuit.qregs[z_qbits_index]
+    z_qbits = Circuit.qregs[z_qbits_idx]
 
     for ri in range( NumberOfSteps ):
-        A_gate( Circuit , ri*Delta_t , Omega , Gamma_list , RegisterIndices)
-        Circuit.append( Diagonal_U0(DiagonalParams, Delta_t) , z_qbits )
+        W_gate( Circuit , ri*Delta_t , DiagonalParams , Delta_t , Omega , Gamma_list , RegisterIndices , False )
+        Circuit.append( diagonal_unitary(DiagonalParams, Delta_t) , z_qbits )
 
+def Prepare_full_unitary( Circuit , DiagonalParams , Omega , Delta_t , Gamma_list , RegisterIndices , NumberOfSteps ):
+    [kq_qbits_idx , iq_qbits_idx , z_qbits_idx , q_qbits_idx , anc_qbits_idx] = RegisterIndices
+    z_qbits = Circuit.qregs[z_qbits_idx]
+
+    for ri in range( NumberOfSteps ):
+        A_gate( Circuit , DiagonalParams , ri*Delta_t , Omega , Delta_t , Gamma_list , RegisterIndices)
+        Circuit.append( diagonal_unitary(DiagonalParams, Delta_t) , z_qbits )
 # =================================================================================== #
 # ------------------------ State initialization and readouts ------------------------ #
 
