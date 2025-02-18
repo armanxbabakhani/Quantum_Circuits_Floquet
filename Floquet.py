@@ -485,7 +485,6 @@ while t < final_time:
 
         return final_state_density
 
-
     # ==================================== THE SIMULATION ====================================== #
     # ---------------------------- Initializing the quantum circuit ---------------------------- #
     Nkq = int(np.log2(K))*Q
@@ -505,7 +504,6 @@ while t < final_time:
     q_qbits_index = 4
 
     #FullCirc = qk.QuantumCircuit( kqQubits , iqQubits , zQubits , ancQubit , qQubits )
-
 
     # =========================== Building the circuits  U_0(dt) U_od(dt) ... U_0(dt) U_od(dt) =================================== #
     FullCirc = qk.QuantumCircuit( kqQubits , iqQubits , zQubits , ancQubit, qQubits )

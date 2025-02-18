@@ -52,6 +52,8 @@ def Q_angle(Q_max , GammaDt , i):
 
 def UQ_circuit(Q_max , number_of_spins , GammaDt , dagger=False):
     L = int(np.log2(number_of_spins))
+    if L < 1:
+        L = 1
     uq = qk.QuantumCircuit(Q_max*L)
     if dagger:
         for q in range(Q_max-1 , 0 , -1):
@@ -216,12 +218,15 @@ def Uc_P( Circuit , NumOfPermutations , CtrQbitsIndex , TargQbitsIndex , SubInde
     Input (int) #3 (TargQbitsIndex): The index of the register for the target qubits
     Input (int) #4 (SubIndex): The sub-index (q) for the i_q register to generate the controlled qubit
     Input (bool) #5 (dagger): Speficies whether the gate is hermitian conjugate of U_p or not
+
     """
     # Assuming SubIndex refers to a specific block of register of size log2(n) qubits
     if SubIndex > 0:
         CtrQbits = Circuit.qregs[CtrQbitsIndex]
         TargQbits = Circuit.qregs[TargQbitsIndex]
         L = int( np.ceil(np.log2(NumOfPermutations)) )
+        if L < 1:
+            L = 1
         NQbits = Circuit.num_qubits # Total qubits for the circuit
         
         CtrQbitsSubset = CtrQbits[(SubIndex-1)*L:SubIndex*L]
@@ -232,16 +237,16 @@ def Uc_P( Circuit , NumOfPermutations , CtrQbitsIndex , TargQbitsIndex , SubInde
         cxxGate = cxxGate.control(L)
         
         if dagger:
-            for i in np.arange(NumOfPermutations-1 , 0 , -1):
+            for i in np.arange(NumOfPermutations , 0 , -1):
                 ibin = bin(i)[2:]
                 ibin = (L-len(ibin))*'0' + ibin
                 ibin = ibin[::-1]
                 
                 ZeroCtrls = [x for x in range(L) if(int(ibin[x]) == 0)]
-                for j in range(len(ZeroCtrls)):
+                for j in np.arange(len(ZeroCtrls) , 0 , -1):
                     Circuit.x( CtrQbitsSubset[ZeroCtrls[j]] )
                 Circuit.append( cxxGate , CtrQbitsSubset[:] + TargQbits[i-1:i+1] )
-                for j in np.arange(len(ZeroCtrls)-1 , -1 , -1):
+                for j in np.arange(len(ZeroCtrls) , 0 , -1):
                     Circuit.x( CtrQbitsSubset[ZeroCtrls[j]] )
         else:
             for i in np.arange(1, NumOfPermutations+1):
@@ -272,15 +277,12 @@ def U0_q_ctrl( Circuit , DiagonalParams , delta_t , q_qbits , z_qbits , dagger=F
 
     """
 
-    #Longit_h = DiagonalParams[0]
-    #Vx = DiagonalParams[1]
-
     if dagger:
         for k in range(len(q_qbits)-1 , 0 , -1):
             CUk = diagonal_unitary( DiagonalParams , delta_t/((k+1)*(k+2)) )
             CUk = CUk.control()
             Circuit.append( CUk , [q_qbits[k]] + z_qbits[:] )
-        CU0 = diagonal_unitary( DiagonalParams , -delta_t/(2.0) )
+        CU0 = diagonal_unitary( DiagonalParams , -1.0*delta_t/(2.0) )
         CU0 = CU0.control()
         Circuit.append( CU0 , [q_qbits[0]] + z_qbits[:] )
     else:
@@ -288,7 +290,7 @@ def U0_q_ctrl( Circuit , DiagonalParams , delta_t , q_qbits , z_qbits , dagger=F
         CU0 = CU0.control()
         Circuit.append( CU0 , [q_qbits[0]] + z_qbits[:] )
         for k in np.arange(1, len(q_qbits)):
-            CUk = diagonal_unitary( DiagonalParams , -delta_t/((k+1)*(k+2)) )
+            CUk = diagonal_unitary( DiagonalParams , -1.0*delta_t/((k+1)*(k+2)) )
             CUk = CUk.control()
             Circuit.append( CUk , [q_qbits[k]] + z_qbits[:] )
 
@@ -343,7 +345,7 @@ def Uc_Phi(Circuit , NumberOfPermutations , DiagonalParams , Delta_t , Q , iq_qb
     Input (int) #2 (z_qbits_idx): The index of the register of the |z> qubits
     Input (int) #3 (q_qbits_idx): The index of the register of the |q> qubits
     Input (bool) #4 (dagger): Speficies whether the gate is hermitian conjugate of the gate or not 
-    
+
     """
 
     M = NumberOfPermutations
@@ -362,6 +364,7 @@ def Uc_Phi(Circuit , NumberOfPermutations , DiagonalParams , Delta_t , Q , iq_qb
             Circuit.crz( -np.pi , q_qbits[j-1] , z_qbits[0] )
     else:
         for j in np.arange(1,Q+1):
+            # Generating a factor of imaginary (i)^q
             Circuit.crz( np.pi , q_qbits[j-1] , z_qbits[0] )
             Circuit.cp( -np.pi , q_qbits[j-1] , z_qbits[0] )
 
@@ -378,10 +381,10 @@ def W_gate(Circuit , current_time , DiagonalParams , Delta_t , Omega , Gamma_lis
     zRegister = Circuit.qregs[z_qbits_idx]
     qRegister = Circuit.qregs[q_qbits_idx]
     Q_max = qRegister.size
-    NumberOfSpins = zRegister.size - 1  # One of the qubits in the zRegister is used as an ancilla! We might be able to remove this as it is unnecessary.
+    NumberOfSpins = zRegister.size  # One of the qubits in the zRegister is used as an ancilla! We might be able to remove this as it is unnecessary.
     NumberOfPermutations = len(Gamma_list[0])
 
-    B_state_prepare(Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
+    B_state_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , False )
     Uc_Phi( Circuit , NumberOfPermutations , DiagonalParams , Delta_t , Q_max , iq_qbits_idx , z_qbits_idx , q_qbits_idx , dagger )
     Uc_Phi_Omega( Circuit , Omega , Delta_t , current_time , kq_qbits_idx , q_qbits_idx , dagger )
     B_state_prepare( Circuit , Q_max , Delta_t , Gamma_list , kq_qbits_idx , iq_qbits_idx , q_qbits_idx , True )
@@ -439,8 +442,11 @@ def Prepare_full_unitary( Circuit , DiagonalParams , Omega , Delta_t , Gamma_lis
     z_qbits = Circuit.qregs[z_qbits_idx]
 
     for ri in range( NumberOfSteps ):
-        A_gate( Circuit , DiagonalParams , ri*Delta_t , Omega , Delta_t , Gamma_list , RegisterIndices)
-        Circuit.append( diagonal_unitary(DiagonalParams, Delta_t) , z_qbits )
+        A_gate( Circuit , DiagonalParams , ri*Delta_t , Omega , Delta_t , Gamma_list , RegisterIndices )
+        Circuit.append( diagonal_unitary( DiagonalParams , Delta_t ) , z_qbits )
+    
+    # for i in range(  ):
+
 # =================================================================================== #
 # ------------------------ State initialization and readouts ------------------------ #
 
